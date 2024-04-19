@@ -2199,6 +2199,7 @@ impl EditorElement {
 
         let clickable_hunks = if show_git_gutter {
             Some(Self::paint_diff_hunks(
+                &self.editor,
                 layout.gutter_hitbox.bounds,
                 layout,
                 &cx.mouse_position(),
@@ -2242,6 +2243,8 @@ impl EditorElement {
     }
 
     fn paint_diff_hunks(
+        // TODO kb get `expanded_hunks`, map them to rows
+        editor: &View<Editor>,
         bounds: Bounds<Pixels>,
         layout: &EditorLayout,
         mouse_position: &gpui::Point<Pixels>,
@@ -2252,6 +2255,7 @@ impl EditorElement {
             return clickable_hunks;
         }
 
+        // TODO kb use larger hunk bounds
         let line_height = layout.position_map.line_height;
         cx.paint_layer(layout.gutter_hitbox.bounds, |cx| {
             for hunk in &layout.display_hunks {
@@ -3244,6 +3248,7 @@ fn try_click_diff_hunk(
         Some((buffer_snapshot, original_text))
     })?;
     let hunk_start = buffer_snapshot.anchor_at(buffer_range.start, Bias::Left);
+    // TODO kb highlights one extra line, fix
     let hunk_end = buffer_snapshot.anchor_at(buffer_range.end, Bias::Left);
 
     let mut created_color = cx.theme().status().git().created;

@@ -458,7 +458,7 @@ pub struct Editor {
     active_inline_completion: Option<Inlay>,
     show_inline_completions: bool,
     inlay_hint_cache: InlayHintCache,
-    git_blocks: HashSet<BlockId>,
+    expanded_hunks: Vec<ExpandedGitHunk>,
     next_inlay_id: usize,
     _subscriptions: Vec<Subscription>,
     pixel_position_of_newest_cursor: Option<gpui::Point<Pixels>>,
@@ -482,6 +482,12 @@ pub struct Editor {
     >,
     last_bounds: Option<Bounds<Pixels>>,
     expect_bounds_change: Option<Bounds<Pixels>>,
+}
+
+struct ExpandedGitHunk {
+    block: Option<BlockId>,
+    rows_highlighted: bool,
+    hunk_range: Range<Anchor>,
 }
 
 #[derive(Clone)]
