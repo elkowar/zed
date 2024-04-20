@@ -1,13 +1,15 @@
-use std::sync::Arc;
-
 use anyhow::Result;
-use assistant_tooling::LanguageModelTool;
-use gpui::{AppContext, Model, Task};
+use assistant_tooling::{tool::ToolFunctionOutput, LanguageModelTool};
+use gpui::{prelude::*, AnyElement, AppContext, Model, Task};
 use project::Fs;
 use schemars::JsonSchema;
 use semantic_index::ProjectIndex;
 use serde::{Deserialize, Serialize};
-use ui::{div, IntoElement, SharedString, WindowContext};
+use std::sync::Arc;
+use ui::{
+    div, prelude::*, CollapsibleContainer, Color, Icon, IconName, Label, SharedString,
+    WindowContext,
+};
 use util::ResultExt as _;
 
 #[derive(Serialize)]
@@ -27,61 +29,60 @@ pub struct ProjectIndexTool {
     pub fs: Arc<dyn Fs>,
 }
 
-impl LanguageModelTool for ProjectIndexTool {
-    type Input = CodebaseQuery;
-    type Output = Vec<CodebaseExcerpt>;
+pub struct Excerpts {
+    pub excerpts: Vec<CodebaseExcerpt>,
+}
 
-    fn name(&self) -> String {
-        "query_codebase".to_string()
-    }
+impl ToolFunctionOutput for Excerpts {
+    fn render(&self, cx: &mut WindowContext) -> AnyElement {
+        // For if/when we have indeterminate loading
+        // match output {
+        //     None => div()
+        //         .h_flex()
+        //         .items_center()
+        //         .gap_1()
+        //         .child(Icon::new(IconName::Ai).color(Color::Muted).into_element())
+        //         .child("Searching codebase..."),
+        // Some(excerpts) => {
 
-    fn description(&self) -> String {
-        "Executes a query against the codebase, returning excerpts related to the query".to_string()
-    }
+        let excerpts = self.excerpts;
 
-    fn render_output(output: Option<Self::Output>, cx: &mut WindowContext) -> impl IntoElement {
-        match output {
-            None => div()
-                .h_flex()
-                .items_center()
-                .gap_1()
-                .child(Icon::new(IconName::Ai).color(Color::Muted).into_element())
-                .child("Searching codebase..."),
-            Some(excerpts) => {
-                div()
-                    .v_flex()
-                    .gap_2()
-                    .children(excerpts.iter().map(|excerpt| {
-                        let expanded = excerpt.expanded;
-                        let element_id = excerpt.element_id.clone();
+        div()
+            .v_flex()
+            .gap_2()
+            .children(excerpts.iter().map(|excerpt| {
+                // This render doesn't have state/model, so we can't use the listener
+                // let expanded = excerpt.expanded;
+                // let element_id = excerpt.element_id.clone();
+                let element_id = ElementId::Name(nanoid::nanoid!().into());
+                let expanded = false;
 
-                        CollapsibleContainer::new(element_id.clone(), expanded)
-                            .start_slot(
-                                h_flex()
-                                    .gap_1()
-                                    .child(Icon::new(IconName::File).color(Color::Muted))
-                                    .child(Label::new(excerpt.path.clone()).color(Color::Muted)),
-                            )
-                            .on_click(cx.listener(move |this, _, cx| {
-                                this.toggle_expanded(element_id.clone(), cx);
-                            }))
+                CollapsibleContainer::new(element_id.clone(), expanded)
+                    .start_slot(
+                        h_flex()
+                            .gap_1()
+                            .child(Icon::new(IconName::File).color(Color::Muted))
+                            .child(Label::new(excerpt.path.clone()).color(Color::Muted)),
+                    )
+                    // .on_click(cx.listener(move |this, _, cx| {
+                    //     this.toggle_expanded(element_id.clone(), cx);
+                    // }))
+                    .child(
+                        div()
+                            .p_2()
+                            .rounded_md()
+                            .bg(cx.theme().colors().editor_background)
                             .child(
-                                div()
-                                    .p_2()
-                                    .rounded_md()
-                                    .bg(cx.theme().colors().editor_background)
-                                    .child(
-                                        excerpt.text.clone(), // todo!(): Show as an editor block
-                                    ),
-                            )
-                    }))
-            }
-        }
+                                excerpt.text.clone(), // todo!(): Show as an editor block
+                            ),
+                    )
+            }))
+            .into_any_element()
     }
 
-    fn format_output(excerpts: Self::Output) -> String {
+    fn format(&self) -> String {
         let mut body = "Semantic search results for user query:\n".to_string();
-        for excerpt in excerpts {
+        for excerpt in self.excerpts {
             body.push_str("Excerpt from ");
             body.push_str(excerpt.path.as_ref());
             body.push_str(", score ");
@@ -92,6 +93,19 @@ impl LanguageModelTool for ProjectIndexTool {
             body.push_str("~~~\n");
         }
         body
+    }
+}
+
+impl LanguageModelTool for ProjectIndexTool {
+    type Input = CodebaseQuery;
+    type Output = Excerpts;
+
+    fn name(&self) -> String {
+        "query_codebase".to_string()
+    }
+
+    fn description(&self) -> String {
+        "Executes a query against the codebase, returning excerpts related to the query".to_string()
     }
 
     fn execute(&self, query: Self::Input, cx: &AppContext) -> Task<Result<Self::Output>> {
@@ -120,7 +134,7 @@ impl LanguageModelTool for ProjectIndexTool {
                         end -= 1;
                     }
 
-                    // todo!("what should we do with out of date ranges?");
+                    // todo!("Handle out of date ranges");
 
                     anyhow::Ok(CodebaseExcerpt {
                         path: path.to_string_lossy().to_string().into(),
@@ -130,13 +144,12 @@ impl LanguageModelTool for ProjectIndexTool {
                 }
             });
 
-            anyhow::Ok(
-                futures::future::join_all(excerpts)
-                    .await
-                    .into_iter()
-                    .filter_map(|result| result.log_err())
-                    .collect(),
-            )
+            let excerpts = futures::future::join_all(excerpts)
+                .await
+                .into_iter()
+                .filter_map(|result| result.log_err())
+                .collect();
+            anyhow::Ok(Excerpts { excerpts })
         })
     }
 }

@@ -172,7 +172,7 @@ impl AssistantChat {
                         this.completion_messages(cx),
                         Vec::new(),
                         1.0,
-                        this.tool_registry.definitions(),
+                        this.tool_registry.definitions.as_slice(),
                     )
                 });
 
